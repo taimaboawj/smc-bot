@@ -9,7 +9,15 @@ GEMINI_KEY = "AIzaSyDDa02t_y2HYp33IwGR_ksXOoax-XDOUfI"
 
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel("gemini-2.0-flash")
-exchange = ccxt.kucoin()
+import requests
+
+def get_price_data(coin):
+    url = f"https://api.coingecko.com/api/v3/coins/{coin.lower()}/market_chart?vs_currency=usd&days=1&interval=hourly"
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
+    prices = r.json()["prices"]
+    return prices
 
 TOP_COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "MATIC", "DOT"]
 
@@ -64,12 +72,11 @@ async def signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     market = context.user_data.get("market", "spot")
     coin = context.user_data.get("coin", "BTC")
 
-    try:
-        ohlcv = exchange.fetch_ohlcv(f"{coin}/USDT", "1h", limit=10)
-        candles = "\n".join([f"O:{c[1]} H:{c[2]} L:{c[3]} C:{c[4]}" for c in ohlcv])
-    except:
-        await update.message.reply_text(f"❌ العملة {coin} مو موجودة، جرب عملة ثانية.")
-        return
+    prices = get_price_data(coin)
+if not prices:
+    await update.message.reply_text(f"❌ العملة {coin} مو موجودة، جرب عملة ثانية.")
+    return
+candles = "\n".join([f"السعر: {p[1]:.2f}$" for p in prices[-10:]])
 
     prompt = f"""أنت محلل SMC محترف. حلل هاي البيانات لـ {coin}/USDT:
 
