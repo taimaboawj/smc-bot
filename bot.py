@@ -9,7 +9,7 @@ GEMINI_KEY = "AIzaSyDDa02t_y2HYp33IwGR_ksXOoax-XDOUfI"
 
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel("gemini-2.0-flash")
-exchange = ccxt.binance()
+exchange = ccxt.kucoin()
 
 TOP_COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "MATIC", "DOT"]
 
