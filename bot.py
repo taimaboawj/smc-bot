@@ -1,4 +1,4 @@
-import ccxt
+import requests
 import random
 import google.generativeai as genai
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -9,17 +9,33 @@ GEMINI_KEY = "AIzaSyDDa02t_y2HYp33IwGR_ksXOoax-XDOUfI"
 
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel("gemini-2.0-flash")
-import requests
 
-def get_price_data(coin):
-    url = f"https://api.coingecko.com/api/v3/coins/{coin.lower()}/market_chart?vs_currency=usd&days=1&interval=hourly"
-    r = requests.get(url)
-    if r.status_code != 200:
+TOP_COINS = ["bitcoin", "ethereum", "solana", "binancecoin", "ripple", "dogecoin", "cardano", "avalanche-2", "matic-network", "polkadot"]
+COIN_NAMES = {"bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL", "binancecoin": "BNB", "ripple": "XRP", "dogecoin": "DOGE", "cardano": "ADA", "avalanche-2": "AVAX", "matic-network": "MATIC", "polkadot": "DOT"}
+
+def get_price_data(coin_id):
+    try:
+        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=1&interval=hourly"
+        r = requests.get(url, timeout=10)
+        if r.status_code != 200:
+            return None
+        prices = r.json()["prices"]
+        return prices
+    except:
         return None
-    prices = r.json()["prices"]
-    return prices
 
-TOP_COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "MATIC", "DOT"]
+def search_coin(coin_name):
+    try:
+        url = f"https://api.coingecko.com/api/v3/search?query={coin_name}"
+        r = requests.get(url, timeout=10)
+        if r.status_code != 200:
+            return None
+        results = r.json().get("coins", [])
+        if results:
+            return results[0]["id"]
+        return None
+    except:
+        return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -50,9 +66,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("كيف تبي الإشارة؟", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == "random_coin":
-        coin = random.choice(TOP_COINS)
-        context.user_data["coin"] = coin
-        await query.edit_message_text(f"✅ تم!\nالعملة المختارة: {coin}\nاكتب /signal للإشارة")
+        coin_id = random.choice(TOP_COINS)
+        context.user_data["coin_id"] = coin_id
+        context.user_data["coin"] = COIN_NAMES[coin_id]
+        await query.edit_message_text(f"✅ تم!\nالعملة المختارة: {COIN_NAMES[coin_id]}\nاكتب /signal للإشارة")
 
     elif query.data == "custom_coin":
         context.user_data["waiting_coin"] = True
@@ -60,10 +77,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("waiting_coin"):
-        coin = update.message.text.upper().strip()
-        context.user_data["coin"] = coin
+        coin_input = update.message.text.strip()
+        coin_id = search_coin(coin_input)
+        if not coin_id:
+            await update.message.reply_text(f"❌ ما لقيت العملة {coin_input}، جرب عملة ثانية.")
+            return
+        context.user_data["coin_id"] = coin_id
+        context.user_data["coin"] = coin_input.upper()
         context.user_data["waiting_coin"] = False
-        await update.message.reply_text(f"✅ تم!\nالعملة: {coin}\nاكتب /signal للإشارة")
+        await update.message.reply_text(f"✅ تم!\nالعملة: {coin_input.upper()}\nاكتب /signal للإشارة")
 
 async def signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⏳ جاري التحليل...")
@@ -71,12 +93,14 @@ async def signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     style = context.user_data.get("style", "swing")
     market = context.user_data.get("market", "spot")
     coin = context.user_data.get("coin", "BTC")
+    coin_id = context.user_data.get("coin_id", "bitcoin")
 
-    prices = get_price_data(coin)
-if not prices:
-    await update.message.reply_text(f"❌ العملة {coin} مو موجودة، جرب عملة ثانية.")
-    return
-candles = "\n".join([f"السعر: {p[1]:.2f}$" for p in prices[-10:]])
+    prices = get_price_data(coin_id)
+    if not prices:
+        await update.message.reply_text("❌ ما قدرت أجيب البيانات، جرب بعد شوي.")
+        return
+
+    candles = "\n".join([f"السعر: {p[1]:.4f}$" for p in prices[-10:]])
 
     prompt = f"""أنت محلل SMC محترف. حلل هاي البيانات لـ {coin}/USDT:
 
